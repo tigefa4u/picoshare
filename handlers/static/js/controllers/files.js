@@ -18,11 +18,18 @@ function uploadFormData(url, formData, progressFn) {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(xhr.response);
       } else {
+        if (xhr.responseText) {
+          reject(xhr.responseText);
+          return;
+        }
         reject(xhr.statusText);
       }
     });
     xhr.addEventListener("error", () => {
-      reject("Failed to communicate with server: " + xhr.statusText);
+      reject(
+        "Failed to communicate with server" +
+          (xhr.statusText ? `: ${xhr.statusText}` : ".")
+      );
     });
     xhr.send(formData);
   })
@@ -80,7 +87,8 @@ export async function editFile(id, filename, expiration, note) {
     .catch((error) => {
       if (error.message) {
         return Promise.reject(
-          "Failed to communicate with server: " + error.message
+          "Failed to communicate with server" +
+            (error.message ? `: ${error.message}` : ".")
         );
       }
       return Promise.reject(error);
@@ -103,7 +111,8 @@ export async function deleteFile(id) {
     .catch((error) => {
       if (error.message) {
         return Promise.reject(
-          "Failed to communicate with server: " + error.message
+          "Failed to communicate with server" +
+            (error.message ? `: ${error.message}` : ".")
         );
       }
       return Promise.reject(error);

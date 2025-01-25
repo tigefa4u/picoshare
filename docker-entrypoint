@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Exit build script on first failure.
 set -e
@@ -18,8 +18,9 @@ while [ "$#" -gt 0 ]; do
     *) shift 1;;
   esac
 done
+readonly DB_PATH
 # We need to export DB_PATH because litestream.yml references it.
-export readonly DB_PATH
+export DB_PATH
 
 is_litestream_enabled() {
   set +ux
@@ -47,13 +48,14 @@ if [[ "${IS_LITESTREAM_ENABLED}" == 'true' ]]; then
   /app/litestream version
   echo "LITESTREAM_BUCKET=${LITESTREAM_BUCKET}"
   echo "LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT}"
+  echo "LITESTREAM_RETENTION=${LITESTREAM_RETENTION}"
 
   if [[ -f "$DB_PATH" ]]; then
     echo "Existing database is $(stat -c %s "${DB_PATH}") bytes"
   else
     echo "No existing database found"
     # Restore database from remote storage.
-    /app/litestream restore -if-replica-exists -v "${DB_PATH}"
+    /app/litestream restore -if-replica-exists "${DB_PATH}"
   fi
 
   # Let Litestream start PicoShare as a child process

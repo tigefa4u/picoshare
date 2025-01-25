@@ -1,8 +1,11 @@
-FROM golang:1.18.4 AS builder
+FROM golang:1.23.3 AS builder
 
 ARG TARGETPLATFORM
+ARG PS_VERSION
 
+COPY ./build /app/build
 COPY ./cmd /app/cmd
+COPY ./dev-scripts /app/dev-scripts
 COPY ./garbagecollect /app/garbagecollect
 COPY ./handlers /app/handlers
 COPY ./picoshare /app/picoshare
@@ -13,26 +16,17 @@ COPY ./go.* /app/
 
 WORKDIR /app
 
-RUN set -x && \
-    if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then \
-      GOARCH="arm"; \
-    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-      GOARCH="arm64"; \
-    else \
-      GOARCH="amd64"; \
-    fi && \
-    set -u && \
-    GOOS=linux \
-    go build \
-      -tags netgo \
-      -ldflags '-w -extldflags "-static"' \
-      -o /app/bin/picoshare \
-      cmd/picoshare/main.go
+RUN TARGETPLATFORM="${TARGETPLATFORM}" \
+    PS_VERSION="${PS_VERSION}" \
+    ./dev-scripts/build-backend "prod"
 
-FROM debian:stable-20211011-slim AS litestream_downloader
+FROM scratch AS artifact
+COPY --from=builder /app/bin/picoshare ./
+
+FROM debian:stable-20240311-slim AS litestream_downloader
 
 ARG TARGETPLATFORM
-ARG litestream_version="v0.3.9"
+ARG litestream_version="v0.3.13"
 
 WORKDIR /litestream
 
@@ -51,7 +45,7 @@ RUN set -x && \
       ARCH="amd64" ; \
     fi && \
     set -u && \
-    litestream_binary_tgz_filename="litestream-${litestream_version}-linux-${ARCH}-static.tar.gz" && \
+    litestream_binary_tgz_filename="litestream-${litestream_version}-linux-${ARCH}.tar.gz" && \
     wget "https://github.com/benbjohnson/litestream/releases/download/${litestream_version}/${litestream_binary_tgz_filename}" && \
     mv "${litestream_binary_tgz_filename}" litestream.tgz
 RUN tar -xvzf litestream.tgz
@@ -64,8 +58,9 @@ COPY --from=builder /app/bin/picoshare /app/picoshare
 COPY --from=litestream_downloader /litestream/litestream /app/litestream
 COPY ./docker-entrypoint /app/docker-entrypoint
 COPY ./litestream.yml /etc/litestream.yml
-COPY ./static /app/static
 COPY ./LICENSE /app/LICENSE
+
+ENV LITESTREAM_RETENTION=72h
 
 WORKDIR /app
 

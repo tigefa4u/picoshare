@@ -2,6 +2,7 @@
 
 [![CircleCI](https://circleci.com/gh/mtlynch/picoshare.svg?style=svg)](https://circleci.com/gh/mtlynch/picoshare)
 [![Docker Version](https://img.shields.io/docker/v/mtlynch/picoshare?sort=semver&maxAge=86400)](https://hub.docker.com/r/mtlynch/picoshare/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mtlynch/picoshare.svg?maxAge=604800)](https://hub.docker.com/r/mtlynch/picoshare/)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/mtlynch/picoshare)](https://github.com/mtlynch/picoshare/commits/master)
 [![GitHub last commit](https://img.shields.io/github/last-commit/mtlynch/picoshare)](https://github.com/mtlynch/picoshare/commits/master)
 [![Contributors](https://img.shields.io/github/contributors/mtlynch/picoshare)](https://github.com/mtlynch/picoshare/graphs/contributors)
@@ -100,10 +101,9 @@ services:
 
 ### Command-line flags
 
-| Flag      | Meaning                                                                  | Default Value     |
-| --------- | ------------------------------------------------------------------------ | ----------------- |
-| `-db`     | Path to SQLite database                                                  | `"data/store.db"` |
-| `-vacuum` | Vacuum database periodically to reclaim disk space (increases RAM usage) | `false`           |
+| Flag  | Meaning                 | Default Value     |
+| ----- | ----------------------- | ----------------- |
+| `-db` | Path to SQLite database | `"data/store.db"` |
 
 ### Environment variables
 
@@ -123,6 +123,7 @@ You can adjust behavior of the Docker container by specifying these Docker-speci
 | `LITESTREAM_ENDPOINT`          | Litestream-compatible cloud storage endpoint where Litestream should replicate data.                  |
 | `LITESTREAM_ACCESS_KEY_ID`     | Litestream-compatible cloud storage access key ID to the bucket where you want to replicate data.     |
 | `LITESTREAM_SECRET_ACCESS_KEY` | Litestream-compatible cloud storage secret access key to the bucket where you want to replicate data. |
+| `LITESTREAM_RETENTION`         | The amount of time Litestream snapshots & WAL files will be kept (defaults to 72h).                   |
 
 ### Docker build args
 
@@ -132,8 +133,27 @@ If you rebuild the Docker image from source, you can adjust the build behavior w
 | -------------------- | --------------------------------------------------------------------------- | ------------- |
 | `litestream_version` | Version of [Litestream](https://litestream.io/) to use for data replication | `0.3.9`       |
 
+## PicoShare's scope and future
+
+PicoShare is maintained by Michael Lynch as a hobby project.
+
+Due to time limitations, I keep PicoShare's scope limited to only the features that fit into my workflows. That unfortunately means that I sometimes reject proposals or contributions for perfectly good features. It's nothing against those features, but I only have bandwidth to maintain features that I use.
+
 ## Deployment
 
 PicoShare is easy to deploy to cloud hosting platforms:
 
 - [fly.io](docs/deployment/fly.io.md)
+
+## Tips and tricks
+
+### Reclaiming reserved database space
+
+Some users find it surprising that when they delete files from PicoShare, they don't gain back free space on their filesystem.
+
+When you delete files, PicoShare reserves the space for future uploads. If you'd like to reduce PicoShare's usage of your filesystem, you can manually force PicoShare to give up the space by performing the following steps:
+
+1. Shut down PicoShare.
+1. Run `sqlite3 data/store.db 'VACUUM'` where `data/store.db` is the path to your PicoShare database.
+
+You should find that the `data/store.db` should shrink in file size, as it relinquishes the space dedicated to previously deleted files. If you start PicoShare again, the System Information screen will show the smaller size of PicoShare files.

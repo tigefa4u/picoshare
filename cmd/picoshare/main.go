@@ -22,11 +22,10 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Llongfile)
 	log.Print("starting picoshare server")
 
 	dbPath := flag.String("db", "data/store.db", "path to database")
-	vacuumDb := flag.Bool("vacuum", false, "vacuum database periodically to reclaim disk space")
 	flag.Parse()
 
 	authenticator, err := shared_secret.New(requireEnv("PS_SHARED_SECRET"))
@@ -40,13 +39,15 @@ func main() {
 
 	store := sqlite.New(*dbPath, isLitestreamEnabled())
 
-	spaceChecker := space.NewChecker(dbDir)
+	spaceChecker := space.NewChecker(*dbPath, &store)
 
-	collector := garbagecollect.NewCollector(store, *vacuumDb)
+	collector := garbagecollect.NewCollector(store)
 	gc := garbagecollect.NewScheduler(&collector, 7*time.Hour)
 	gc.StartAsync()
 
-	server := handlers.New(authenticator, store, spaceChecker, &collector)
+	clock := handlers.NewClock()
+
+	server := handlers.New(authenticator, &store, spaceChecker, &collector, &clock)
 
 	h := gorilla.LoggingHandler(os.Stdout, server.Router())
 	if os.Getenv("PS_BEHIND_PROXY") != "" {
@@ -62,7 +63,7 @@ func main() {
 	httpSrv := http.Server{Addr: fmt.Sprintf(":%s", port), Handler: h}
 	go func() {
 		log.Printf("listening on %s", port)
-		log.Fatal(httpSrv.ListenAndServe())
+		log.Printf("http server exit: %s", httpSrv.ListenAndServe())
 	}()
 	<-stop
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

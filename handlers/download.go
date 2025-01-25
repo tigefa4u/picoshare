@@ -4,10 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime"
+	"net"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/mux"
+
 	"github.com/mtlynch/picoshare/v2/picoshare"
 	"github.com/mtlynch/picoshare/v2/store"
 )
@@ -21,7 +25,7 @@ func (s Server) entryGet() http.HandlerFunc {
 			return
 		}
 
-		entry, err := s.getDB(r).GetEntry(id)
+		entry, err := s.getDB(r).GetEntryMetadata(id)
 		if _, ok := err.(store.EntryNotFoundError); ok {
 			http.Error(w, "entry not found", http.StatusNotFound)
 			return
@@ -41,21 +45,41 @@ func (s Server) entryGet() http.HandlerFunc {
 				contentType = inferred
 			}
 		}
-		w.Header().Set("Content-Type", string(contentType))
+		w.Header().Set("Content-Type", contentType.String())
 
-		http.ServeContent(w, r, string(entry.Filename), entry.Uploaded, entry.Reader)
+		entryFile, err := s.getDB(r).ReadEntryFile(id)
+		if err != nil {
+			log.Printf("error retrieving entry data with id %v: %v", id, err)
+			http.Error(w, "failed to retrieve entry", http.StatusInternalServerError)
+			return
+		}
+
+		http.ServeContent(w, r, entry.Filename.String(), entry.Uploaded, entryFile)
+
+		if err := recordDownload(s.getDB(r), entry.ID, s.clock.Now(), r.RemoteAddr, r.Header.Get("User-Agent")); err != nil {
+			log.Printf("failed to record download of file %s: %v", id.String(), err)
+		}
 	}
 }
 
 func inferContentTypeFromFilename(f picoshare.Filename) (picoshare.ContentType, error) {
 	// For files that modern browser can play natively, infer the content type if
 	// none was specified at upload time.
-	switch filepath.Ext(f.String()) {
-	case ".mp4":
-		return picoshare.ContentType("video/mp4"), nil
-	case ".mp3":
-		return picoshare.ContentType("audio/mpeg"), nil
-	default:
-		return picoshare.ContentType(""), errors.New("could not infer content type from filename")
+	if mimetype := mime.TypeByExtension(filepath.Ext(f.String())); mimetype != "" {
+		return picoshare.ContentType(mimetype), nil
 	}
+	return picoshare.ContentType(""), errors.New("could not infer content type from filename")
+}
+
+func recordDownload(db Store, id picoshare.EntryID, t time.Time, remoteAddr, userAgent string) error {
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		ip = remoteAddr
+	}
+
+	return db.InsertEntryDownload(id, picoshare.DownloadRecord{
+		Time:      t,
+		ClientIP:  ip,
+		UserAgent: userAgent,
+	})
 }

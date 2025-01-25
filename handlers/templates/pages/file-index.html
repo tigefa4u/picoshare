@@ -3,22 +3,22 @@
     .tooltip {
       position: relative;
       display: inline-block;
-    }
 
-    .tooltip .tooltip-text {
-      position: absolute;
-      top: -9px;
-      left: 150%;
-      visibility: hidden;
-      width: max-content;
-      max-width: 400px;
-      padding: 0.5rem 0.75rem;
-      color: black;
-      background-color: #f5faff;
-      border: 1px solid #004e9c;
-      border-radius: 6px;
-      text-align: center;
-      z-index: 1;
+      & .tooltip-text {
+        position: absolute;
+        top: -9px;
+        left: 150%;
+        visibility: hidden;
+        width: max-content;
+        max-width: 400px;
+        padding: 0.5rem 0.75rem;
+        color: black;
+        background-color: #f5faff;
+        border: 1px solid #004e9c;
+        border-radius: 6px;
+        text-align: center;
+        z-index: 1;
+      }
     }
 
     .tooltip:hover .tooltip-text {
@@ -33,42 +33,17 @@
 
 {{ define "script-tags" }}
   <script type="module" nonce="{{ .CspNonce }}">
-    import { deleteFile } from "/js/controllers/files.js";
     import { showElement, hideElement } from "/js/lib/bulma.js";
     import { copyToClipboard } from "/js/lib/clipboard.js";
     import { makeShortLink } from "/js/lib/links.js";
 
     const errorContainer = document.getElementById("error");
 
-    document
-      .querySelectorAll('[pico-purpose="delete"]')
-      .forEach((deleteBtn) => {
-        deleteBtn.addEventListener("click", () => {
-          const id = deleteBtn.getAttribute("pico-entry-id");
-          deleteFile(id)
-            .then(() => {
-              let currentEl = deleteBtn.parentElement;
-              while (currentEl && currentEl.nodeName !== "TR") {
-                currentEl = currentEl.parentElement;
-              }
-              if (!currentEl) {
-                return;
-              }
-
-              currentEl.classList.add("deleted-entry");
-            })
-            .catch((error) => {
-              document.getElementById("error-message").innerText = error;
-              showElement(errorContainer);
-            });
-        });
-      });
-
     document.querySelector("#error .delete").addEventListener("click", () => {
       hideElement(errorContainer);
     });
 
-    document.querySelectorAll('[pico-purpose="copy"]').forEach((copyBtn) => {
+    document.querySelectorAll('[aria-label="Copy"]').forEach((copyBtn) => {
       copyBtn.addEventListener("click", () => {
         const fileId = copyBtn.getAttribute("pico-entry-id");
         const shortLink = makeShortLink(fileId);
@@ -88,9 +63,6 @@
   </script>
 {{ end }}
 
-{{ define "custom-elements" }}
-{{ end }}
-
 {{ define "content" }}
   <h1 class="title">Files</h1>
 
@@ -102,29 +74,33 @@
           <th>Note</th>
           <th>Size</th>
           <th>Uploaded</th>
+          <th>Downloads</th>
           <th>Expires</th>
-          <th class="has-text-right">Actions</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {{ range .Files }}
           <tr test-data-filename="{{ .Filename }}">
-            <td class="is-vcentered" test-data-id="filename">
+            <td class="is-vcentered">
               <a href="/-{{ .ID }}">{{ .Filename }}</a>
             </td>
             <td class="is-vcentered">
               {{ if .Note.Value }}
                 <div class="tooltip">
                   <i class="fa-solid fa-note-sticky mx-auto"></i>
-                  <span class="tooltip-text" test-data-id="note"
-                    >{{ .Note }}</span
-                  >
+                  <span class="tooltip-text">{{ .Note }}</span>
                 </div>
               {{ end }}
             </td>
             <td class="is-vcentered">{{ formatFileSize .Size }}</td>
             <td class="is-vcentered">{{ formatDate .Uploaded }}</td>
-            <td class="is-vcentered" test-data-id="expiration">
+            <td class="is-vcentered">
+              <a href="/files/{{ .ID }}/downloads" aria-label="Download count"
+                >{{ .DownloadCount }}</a
+              >
+            </td>
+            <td class="is-vcentered">
               {{- formatExpiration .Expires -}}
             </td>
             <td class="is-vcentered">
@@ -132,9 +108,19 @@
                 <p class="control">
                   <a
                     class="button is-link"
+                    href="/files/{{ .ID }}/info"
+                    role="button"
+                    aria-label="Information"
+                  >
+                    <i class="fas fa-circle-info"></i>
+                  </a>
+                </p>
+                <p class="control">
+                  <a
+                    class="button is-link"
                     href="/files/{{ .ID }}/edit"
-                    pico-purpose="edit"
-                    pico-entry-id="{{ .ID }}"
+                    role="button"
+                    aria-label="Edit"
                   >
                     <i class="fas fa-edit"></i>
                   </a>
@@ -142,7 +128,7 @@
                 <p class="control">
                   <button
                     class="button is-info"
-                    pico-purpose="copy"
+                    aria-label="Copy"
                     pico-entry-id="{{ .ID }}"
                   >
                     <i class="fa-solid fa-copy"></i>
@@ -166,5 +152,3 @@
     </article>
   </div>
 {{ end }}
-
-{{ template "base.html" }}

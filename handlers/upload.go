@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/mtlynch/picoshare/v2/handlers/parse"
@@ -41,7 +40,7 @@ func (dbe dbError) Unwrap() error {
 
 func (s Server) entryPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expiration, err := parseExpirationFromRequest(r)
+		expiration, err := s.parseExpirationFromRequest(r)
 		if err != nil {
 			log.Printf("invalid expiration URL parameter: %v", err)
 			http.Error(w, fmt.Sprintf("Invalid expiration URL parameter: %v", err), http.StatusBadRequest)
@@ -64,7 +63,7 @@ func (s Server) entryPost() http.HandlerFunc {
 			return
 		}
 
-		respondJSON(w, EntryPostResponse{ID: string(id)})
+		respondJSON(w, EntryPostResponse{ID: id.String()})
 	}
 }
 
@@ -77,7 +76,7 @@ func (s Server) entryPut() http.HandlerFunc {
 			return
 		}
 
-		metadata, err := entryMetadataFromRequest(r)
+		metadata, err := s.entryMetadataFromRequest(r)
 
 		if err != nil {
 			log.Printf("error parsing entry edit request: %v", err)
@@ -132,7 +131,7 @@ func (s Server) guestEntryPost() http.HandlerFunc {
 			r.Body = http.MaxBytesReader(w, r.Body, int64(*gl.MaxFileBytes))
 		}
 
-		id, err := s.insertFileFromRequest(r, picoshare.NeverExpire, guestLinkID)
+		id, err := s.insertFileFromRequest(r, gl.FileLifetime.ExpirationFromTime(s.clock.Now()), guestLinkID)
 		if err != nil {
 			var de *dbError
 			if errors.As(err, &de) {
@@ -146,17 +145,17 @@ func (s Server) guestEntryPost() http.HandlerFunc {
 		}
 
 		if clientAcceptsJson(r) {
-			respondJSON(w, EntryPostResponse{ID: string(id)})
+			respondJSON(w, EntryPostResponse{ID: id.String()})
 		} else {
 			w.Header().Set("Content-Type", "text/plain")
-			if _, err := fmt.Fprintf(w, "%s/-%s\r\n", baseURLFromRequest(r), string(id)); err != nil {
+			if _, err := fmt.Fprintf(w, "%s/-%s\r\n", baseURLFromRequest(r), id.String()); err != nil {
 				log.Fatalf("failed to write HTTP response: %v", err)
 			}
 		}
 	}
 }
 
-func entryMetadataFromRequest(r *http.Request) (picoshare.UploadMetadata, error) {
+func (s Server) entryMetadataFromRequest(r *http.Request) (picoshare.UploadMetadata, error) {
 	var payload struct {
 		Filename   string `json:"filename"`
 		Expiration string `json:"expiration"`
@@ -176,7 +175,7 @@ func entryMetadataFromRequest(r *http.Request) (picoshare.UploadMetadata, error)
 	// Treat an empty expiration string as NeverExpire.
 	expiration := picoshare.NeverExpire
 	if payload.Expiration != "" {
-		expiration, err = parse.Expiration(payload.Expiration)
+		expiration, err = parse.Expiration(payload.Expiration, s.clock.Now())
 		if err != nil {
 			return picoshare.UploadMetadata{}, err
 		}
@@ -235,8 +234,9 @@ func (s Server) insertFileFromRequest(r *http.Request, expiration picoshare.Expi
 		return picoshare.EntryID(""), err
 	}
 
-	if metadata.Size == 0 {
-		return picoshare.EntryID(""), errors.New("file is empty")
+	fileSize, err := picoshare.FileSizeFromInt64(metadata.Size)
+	if err != nil {
+		return picoshare.EntryID(""), err
 	}
 
 	filename, err := parse.Filename(metadata.Filename)
@@ -265,9 +265,12 @@ func (s Server) insertFileFromRequest(r *http.Request, expiration picoshare.Expi
 			Filename:    filename,
 			ContentType: contentType,
 			Note:        note,
-			GuestLinkID: guestLinkID,
-			Uploaded:    time.Now(),
-			Expires:     expiration,
+			GuestLink: picoshare.GuestLink{
+				ID: guestLinkID,
+			},
+			Uploaded: s.clock.Now(),
+			Expires:  expiration,
+			Size:     fileSize,
 		})
 	if err != nil {
 		log.Printf("failed to save entry: %v", err)
@@ -283,7 +286,7 @@ func parseContentType(s string) (picoshare.ContentType, error) {
 	return picoshare.ContentType(s), nil
 }
 
-func parseExpirationFromRequest(r *http.Request) (picoshare.ExpirationTime, error) {
+func (s Server) parseExpirationFromRequest(r *http.Request) (picoshare.ExpirationTime, error) {
 	expirationRaw, ok := r.URL.Query()["expiration"]
 	if !ok {
 		return picoshare.ExpirationTime{}, errors.New("missing required URL parameter: expiration")
@@ -291,7 +294,7 @@ func parseExpirationFromRequest(r *http.Request) (picoshare.ExpirationTime, erro
 	if len(expirationRaw) <= 0 {
 		return picoshare.ExpirationTime{}, errors.New("missing required URL parameter: expiration")
 	}
-	return parse.Expiration(expirationRaw[0])
+	return parse.Expiration(expirationRaw[0], s.clock.Now())
 }
 
 // mibToBytes converts an amount in MiB to an amount in bytes.

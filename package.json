@@ -1,12 +1,8 @@
 {
   "name": "picoshare-dev",
+  "type": "module",
   "version": "1.0.0",
   "description": "PicoShare dev scripts",
-  "scripts": {
-    "check-format": "prettier --check .",
-    "format": "prettier --write .",
-    "lint": "eslint ./**/*.js"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mtlynch/picoshare.git"
@@ -18,10 +14,9 @@
   },
   "homepage": "https://pico.rocks",
   "devDependencies": {
-    "@playwright/test": "1.32.1",
     "eslint": "^8.11.0",
     "eslint-plugin-playwright": "^0.11.2",
-    "isomorphic-fetch": "^3.0.0",
+    "mocha": "^10.2.0",
     "prettier": "^2.6.0",
     "prettier-plugin-go-template": "0.0.13"
   }

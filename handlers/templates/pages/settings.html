@@ -92,16 +92,19 @@
           .catch((error) => {
             document.getElementById("error-message").innerText = error;
             showElement(errorContainer);
-            enableElement(saveBtn);
           })
           .finally(() => {
             hideElement(progressSpinner);
+            enableElement(saveBtn);
           });
       });
-  </script>
-{{ end }}
 
-{{ define "custom-elements" }}
+    document
+      .querySelector("#error .delete")
+      .addEventListener("click", (evt) => {
+        hideElement(errorContainer);
+      });
+  </script>
 {{ end }}
 
 {{ define "content" }}
@@ -182,5 +185,3 @@
     </article>
   </div>
 {{ end }}
-
-{{ template "base.html" }}

@@ -2,20 +2,22 @@ package garbagecollect
 
 import (
 	"sync"
-
-	"github.com/mtlynch/picoshare/v2/store"
 )
 
-type Collector struct {
-	store    store.Store
-	vacuumDB bool
-	mu       sync.Mutex
-}
+type (
+	DatabasePurger interface {
+		Purge() error
+	}
 
-func NewCollector(store store.Store, vacuumDB bool) Collector {
+	Collector struct {
+		purger DatabasePurger
+		mu     sync.Mutex
+	}
+)
+
+func NewCollector(purger DatabasePurger) Collector {
 	return Collector{
-		store:    store,
-		vacuumDB: vacuumDB,
+		purger: purger,
 	}
 }
 
@@ -23,14 +25,8 @@ func (c *Collector) Collect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.store.Purge(); err != nil {
+	if err := c.purger.Purge(); err != nil {
 		return err
-	}
-
-	if c.vacuumDB {
-		if err := c.store.Compact(); err != nil {
-			return err
-		}
 	}
 
 	return nil

@@ -1,6 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eux
+# Exit on first failing command.
+set -e
+
+# Exit on unset variable.
+set -u
+
+# Echo commands
+set -x
 
 # Change directory to repository root.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -15,11 +22,20 @@ export DB_COPY_PATH="data/${TIMESTAMP}.db"
 
 set +x
 # shellcheck disable=SC1091
-. prod.env
+. .env.prod
 set -x
+
+export LITESTREAM_ENDPOINT
+export LITESTREAM_ACCESS_KEY_ID
+export LITESTREAM_SECRET_ACCESS_KEY
+export LITESTREAM_BUCKET
+
+# Export DB_PATH so that litestream uses the variable to populate
+# litestream.yml.
+export DB_PATH
 
 litestream snapshots -config litestream.yml "${DB_PATH}"
 
 # Retrieve live DB
-litestream restore -v -config litestream.yml -o "${DB_COPY_PATH}" "${DB_PATH}"
+litestream restore -config litestream.yml -o "${DB_COPY_PATH}" "${DB_PATH}"
 cp "${DB_COPY_PATH}" "${DB_PATH}"

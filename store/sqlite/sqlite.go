@@ -8,19 +8,18 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/mtlynch/picoshare/v2/picoshare"
-	"github.com/mtlynch/picoshare/v2/store"
 )
 
 const (
 	timeFormat = time.RFC3339
 	// I think Chrome reads in 32768 chunks, but I haven't checked rigorously.
-	defaultChunkSize = 32768 * 10
+	defaultChunkSize = uint64(32768 * 10)
 )
 
 type (
-	DB struct {
+	Store struct {
 		ctx       *sql.DB
-		chunkSize int
+		chunkSize uint64
 	}
 
 	rowScanner interface {
@@ -28,13 +27,13 @@ type (
 	}
 )
 
-func New(path string, optimizeForLitestream bool) store.Store {
+func New(path string, optimizeForLitestream bool) Store {
 	return NewWithChunkSize(path, defaultChunkSize, optimizeForLitestream)
 }
 
 // NewWithChunkSize creates a SQLite-based datastore with the user-specified
 // chunk size for writing files. Most callers should just use New().
-func NewWithChunkSize(path string, chunkSize int, optimizeForLitestream bool) store.Store {
+func NewWithChunkSize(path string, chunkSize uint64, optimizeForLitestream bool) Store {
 	log.Printf("reading DB from %s", path)
 	ctx, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -61,7 +60,7 @@ func NewWithChunkSize(path string, chunkSize int, optimizeForLitestream bool) st
 
 	applyMigrations(ctx)
 
-	return &DB{
+	return Store{
 		ctx:       ctx,
 		chunkSize: chunkSize,
 	}
@@ -75,6 +74,18 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(timeFormat)
 }
 
+func formatFileLifetime(lt picoshare.FileLifetime) string {
+	return lt.String()
+}
+
 func parseDatetime(s string) (time.Time, error) {
 	return time.Parse(timeFormat, s)
+}
+
+func parseFileLifetime(s string) (picoshare.FileLifetime, error) {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return picoshare.FileLifetime{}, err
+	}
+	return picoshare.NewFileLifetimeFromDuration(d)
 }
